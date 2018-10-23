@@ -1,16 +1,16 @@
 package main
 
 import (
-	"bytes"
-	"encoding/base64"
-	"fmt"
+	"context"
+	"crypto/tls"
 	"net"
 	"os"
+	"os/signal"
 	"runtime"
-	"strconv"
+	"strings"
+	"syscall"
 	"time"
 
-	"github.com/miekg/dns"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/valyala/fasthttp"
@@ -37,15 +37,23 @@ func main() {
 		Use: "doh-proxy",
 		Run: serv,
 	}
-
-	rootCmd.PersistentFlags().StringP("proxy-addr", "", "127.0.0.1:53", "endpoint resolver")
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "localhost"
+	}
+	rootCmd.PersistentFlags().StringP("log-level", "", "info", "log level (default:info)")
+	rootCmd.PersistentFlags().StringP("proxy-addr", "", "127.0.0.1:53", "endpoint resolver address")
 	rootCmd.PersistentFlags().DurationP("timeout", "", 3, "timeout value when resolv name.")
 	rootCmd.PersistentFlags().BoolP("http", "", true, "enable http server")
-	rootCmd.PersistentFlags().StringP("http-listen", "", ":80", "http listen address")
-	rootCmd.PersistentFlags().BoolP("https", "", true, "enable https server")
-	rootCmd.PersistentFlags().BoolP("https-tls-key", "", true, "tls key")
-	rootCmd.PersistentFlags().BoolP("https-tls-cert", "", true, "tls cert")
-	rootCmd.PersistentFlags().StringP("https-listen", "", ":443", "https listen address")
+	rootCmd.PersistentFlags().StringP("http-listen", "", ":80", "http listen address adn port,comma separated.")
+	rootCmd.PersistentFlags().BoolP("https", "", false, "enable https server")
+	rootCmd.PersistentFlags().StringP("https-listen", "", ":443", "https listen address and port,comma separated.")
+	rootCmd.PersistentFlags().StringP("https-tls-key", "", "", "tls key")
+	rootCmd.PersistentFlags().StringP("https-tls-cert", "", "", "tls cert")
+	rootCmd.PersistentFlags().StringP("https-tls-session-ticket-key", "", "", "https session ticket key.")
+	rootCmd.PersistentFlags().BoolP("dnstap", "", false, "enable dnstap")
+	rootCmd.PersistentFlags().StringP("dnstap-socket", "", "/var/run/dnstap.sock", "dnstap socket path.")
+	rootCmd.PersistentFlags().StringP("dnstap-identity", "", hostname, "dnstap socket path.")
 
 	if err := rootCmd.Execute(); err != nil {
 		log.WithFields(log.Fields{
@@ -58,155 +66,158 @@ func main() {
 }
 
 func serv(cb *cobra.Command, args []string) {
+	if loglevel, _ := cb.PersistentFlags().GetString("log-level"); loglevel != "" {
+		log.WithFields(log.Fields{
+			"func":      "serv",
+			"log-level": loglevel,
+		}).Info("set log-level")
+		SetLogLevel(loglevel)
+	}
+
 	var err error
 	p := Proxy{}
+
 	p.host, _ = cb.PersistentFlags().GetString("proxy-addr")
 	p.timeout, _ = cb.PersistentFlags().GetDuration("timeout")
-
 	p.addr, err = net.ResolveUDPAddr("udp", p.host)
+	p.timeout = p.timeout * time.Second
+
 	if err != nil {
 		log.Fatalf("can't resolv udp addr %s\n", p.host)
 	}
-	p.timeout = p.timeout * time.Second
-	if enable, _ := cb.PersistentFlags().GetBool("http"); enable {
-		listen, _ := cb.PersistentFlags().GetString("http-listen")
-		if err := fasthttp.ListenAndServe(listen, p.HandleFastHTTP); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	if enable, _ := cb.PersistentFlags().GetBool("dnstap"); enable {
+		sockFile, _ := cb.PersistentFlags().GetString("dnstap-socket")
+		p.output = NewFrameStreamSockOutput(sockFile)
+		if identity, err := cb.PersistentFlags().GetString("dnstap-identity"); err != nil {
+			p.identity = []byte(identity)
+		}
+		if err != nil {
 			log.WithFields(log.Fields{
 				"func":  "serv",
 				"Error": err,
-			}).Fatal("error in ListenAndServe")
+			}).Fatal("error make dnstap stream")
+		}
+		p.dnstap = true
+		log.WithFields(log.Fields{
+			"func": "serv",
+		}).Info("start DNSTAP outputer")
+		go p.output.RunOutputLoop(ctx)
+	}
+	if enable, _ := cb.PersistentFlags().GetBool("http"); enable {
+		listen, _ := cb.PersistentFlags().GetString("http-listen")
+		listens := strings.Split(listen, ",")
+		for _, addr := range listens {
+			ln, err := net.Listen("tcp", addr)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"func":  "serv",
+					"Error": err,
+				}).Fatal("error in listen addr")
+			}
+			srv := &fasthttp.Server{
+				Handler: p.HandleFastHTTP,
+			}
+			log.WithFields(log.Fields{
+				"func":   "serv",
+				"listen": addr,
+			}).Info("start http server")
+			go func() {
+				err := srv.Serve(ln)
+				if err != nil {
+					log.WithFields(log.Fields{
+						"func":  "serv",
+						"Error": err,
+					}).Fatal("error in listen addr")
+				}
+			}()
 		}
 	}
 	if enable, _ := cb.PersistentFlags().GetBool("https"); enable {
 		listen, _ := cb.PersistentFlags().GetString("https-listen")
 		tlsKey, _ := cb.PersistentFlags().GetString("https-tls-key")
 		tlsCert, _ := cb.PersistentFlags().GetString("https-tls-cert")
-		fasthttp.ListenAndServe(listen, p.HandleFastHTTP)
-		if err := fasthttp.ListenAndServeTLS(listen, tlsCert, tlsKey, p.HandleFastHTTP); err != nil {
-			log.WithFields(log.Fields{
-				"func":  "serv",
-				"Error": err,
-			}).Fatal("error in ListenAndServeTLS")
-		}
-	}
-	select {}
-}
+		sessionTicketKey, _ := cb.PersistentFlags().GetString("https-tls-session-ticket-key")
+		sessionTicketKeyBytes := []byte(sessionTicketKey)
 
-type Proxy struct {
-	host    string
-	timeout time.Duration
-	addr    *net.UDPAddr
-}
-
-func (p *Proxy) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
-	if !bytes.Equal(ctx.Path(), strDnsPath) {
-		ctx.Error("Unsupported path", fasthttp.StatusNotFound)
-		return
-	}
-	var dnsMsg []byte
-	var err error
-	if ctx.IsGet() {
-		dnsMsgBase64 := ctx.QueryArgs().PeekBytes(strDns)
-
-		if dnsMsgBase64 == nil {
-			ctx.Error("bad request", fasthttp.StatusBadRequest)
-			return
-		}
-		dlen := base64.URLEncoding.DecodedLen(len(dnsMsgBase64))
-		dnsMsg = make([]byte, dlen)
-		_, err = base64.URLEncoding.Decode(dnsMsg, dnsMsgBase64)
-		if err != nil {
-			ctx.Error("failed to decode query.", fasthttp.StatusBadRequest)
-			return
-		}
-	} else if ctx.IsPost() {
-		dnsMsg = ctx.PostBody()
-	} else {
-		ctx.Error("Unsupported method", fasthttp.StatusBadRequest)
-		return
-	}
-	if dnsMsg == nil {
-		ctx.Error("bad request", fasthttp.StatusBadRequest)
-		return
-	}
-	log.WithFields(log.Fields{
-		"func": "HandleFastHTTP",
-		"msg":  dnsMsg,
-	}).Debug("start proxy query")
-	conn, err := net.Dial("udp", p.host)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"func":  "HandleFastHTTP",
-			"msg":   dnsMsg,
-			"Error": err,
-		}).Debug("failed to open tcp socket.")
-		ctx.Error("failed to open tcp socket.", fasthttp.StatusInternalServerError)
-		return
-	}
-	defer conn.Close()
-	log.WithFields(log.Fields{
-		"func": "HandleFastHTTP",
-	}).Debug("connection success")
-
-	if _, err := conn.Write(dnsMsg); err != nil {
-		log.WithFields(log.Fields{
-			"func": "HandleFastHTTP",
-		}).Debug("failed to write dns query")
-		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
-	}
-	log.WithFields(log.Fields{
-		"func": "HandleFastHTTP",
-	}).Debug("Success to send dns message")
-
-	ctx.Response.Header.SetContentTypeBytes(strDnsContentType)
-	log.WithFields(log.Fields{
-		"func": "HandleFastHTTP",
-	}).Debug("Success to send dns message")
-
-	recvBuf := []byte{}
-	var size int
-	for {
-		l := make([]byte, bufferSize)
-		n, err := conn.Read(l)
-		recvBuf = append(recvBuf, l[0:n]...)
-		size += n
-		if n != bufferSize {
-			break
-		}
+		cert, err := tls.LoadX509KeyPair(tlsCert, tlsKey)
 		if err != nil {
 			log.WithFields(log.Fields{
-				"func": "HandleFastHTTP",
-			}).Debug("failt to read message")
+				"func":     "serv",
+				"certFile": tlsCert,
+				"keyFile":  tlsKey,
+				"Error":    err,
+			}).Fatal("cannot load TLS key pair")
+		}
+		tlsConfig := &tls.Config{
+			Certificates:             []tls.Certificate{cert},
+			PreferServerCipherSuites: true,
+		}
+		if sessionTicketKey != "" {
+			for i, b := range sessionTicketKeyBytes {
+				if i < 32 {
+					tlsConfig.SessionTicketKey[i] = b
+				} else {
+					log.WithFields(log.Fields{
+						"func":  "serv",
+						"Error": err,
+					}).Fatal("https-tls-session-ticket-key ")
+				}
+			}
+		}
+
+		listens := strings.Split(listen, ",")
+		for _, addr := range listens {
+			ln, err := net.Listen("tcp", addr)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"func":  "serv",
+					"Error": err,
+				}).Fatal("error in listen addr")
+			}
+			srv := &fasthttp.Server{
+				Handler: p.HandleFastHTTP,
+			}
+			log.WithFields(log.Fields{
+				"func":   "serv",
+				"listen": addr,
+			}).Info("start https server")
+			go func() {
+				tlsLn := tls.NewListener(ln, tlsConfig)
+				err = srv.Serve(tlsLn)
+				if err != nil {
+					log.WithFields(log.Fields{
+						"func":  "serv",
+						"Error": err,
+					}).Fatal("error in listen addr")
+				}
+			}()
 		}
 	}
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM)
+	log.WithFields(log.Fields{
+		"func": "serv",
+	}).Info("start server")
+	select {
+	case <-sigCh:
+		cancel()
+	}
+}
 
-	if err != nil {
-		log.WithFields(log.Fields{
-			"func": "HandleFastHTTP",
-		}).Debug("failed to write dns query")
-		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
+func SetLogLevel(logLevel string) {
+	switch logLevel {
+	case "panic":
+		log.SetLevel(log.PanicLevel)
+	case "fatal":
+		log.SetLevel(log.FatalLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	case "debug":
+		log.SetLevel(log.DebugLevel)
 	}
-	ctx.Response.SetBody(recvBuf)
-
-	// parse ttl
-	msg := dns.Msg{}
-	err = msg.Unpack(recvBuf)
-	if err != nil {
-		data := ""
-		for _, v := range recvBuf {
-			data += fmt.Sprintf("%x", v)
-		}
-		log.WithFields(log.Fields{
-			"func": "HandleFastHTTP",
-			"data": data,
-		}).Debug("failed to parse query")
-		ctx.Error("failed to parse query.", fasthttp.StatusInternalServerError)
-		return
-	}
-	if len(msg.Answer) > 0 {
-		ctx.Response.Header.SetBytesK(strDnsCacheControl, strconv.FormatUint(uint64(msg.Answer[0].Header().Ttl), 10))
-	} else if len(msg.Ns) > 0 {
-		ctx.Response.Header.SetBytesK(strDnsCacheControl, strconv.FormatUint(uint64(msg.Ns[0].Header().Ttl), 10))
-	}
-	return
 }
