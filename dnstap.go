@@ -144,7 +144,7 @@ func (o *FrameStreamSockOutput) RunOutputLoop(ctx context.Context) {
 				log.WithFields(log.Fields{
 					"func": "RunOutputLoop",
 				}).Debug("flush new connects")
-				o.Flush()
+				o.channelFlush()
 				if err := o.newConnect(); err == nil {
 					wait = false
 				}
@@ -156,11 +156,9 @@ func (o *FrameStreamSockOutput) RunOutputLoop(ctx context.Context) {
 			case frame := <-o.OutputChannel:
 				if _, err := o.enc.Write(frame); err != nil {
 					wait = true
-				} else {
-					o.enc.Flush()
 				}
 			case <-ticker.C:
-				o.Flush()
+				o.enc.Flush()
 			case <-ctx.Done():
 				break
 			}
@@ -168,7 +166,7 @@ func (o *FrameStreamSockOutput) RunOutputLoop(ctx context.Context) {
 	}
 	o.Close()
 }
-func (o *FrameStreamSockOutput) Flush() {
+func (o *FrameStreamSockOutput) channelFlush() {
 	for len(o.OutputChannel) > outputChannelFlush {
 		<-o.OutputChannel
 	}
