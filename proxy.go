@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/mimuret/dtap"
+
 	dnstap "github.com/dnstap/golang-dnstap"
 	"github.com/golang/protobuf/proto"
 	"github.com/miekg/dns"
@@ -20,16 +22,18 @@ var dnstapType = dnstap.Dnstap_MESSAGE
 type Proxy struct {
 	host     string
 	dnstap   bool
+	recIP    bool
+	useXFF   bool
 	timeout  time.Duration
 	addr     *net.UDPAddr
-	output   *FrameStreamSockOutput
+	output   *dtap.DnstapOutput
 	identity []byte
 }
 
 func (p *Proxy) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 	var g *Generator
 	if p.dnstap {
-		g = NewGenerator(ctx)
+		g = NewGenerator(ctx, p.recIP, p.useXFF)
 	}
 
 	if !bytes.Equal(ctx.Path(), strDnsPath) {
@@ -70,10 +74,10 @@ func (p *Proxy) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 			Message:  tapMsg,
 		}
 
-		frData, err := proto.Marshal(dnstap)
+		frame, err := proto.Marshal(dnstap)
 
 		if err == nil {
-			p.output.OutputChannel <- frData
+			p.output.SetMessage(frame)
 		}
 	}
 	log.WithFields(log.Fields{
@@ -164,9 +168,10 @@ func (p *Proxy) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 			Message:  tapMsg,
 		}
 
-		frData, err := proto.Marshal(dnstap)
+		frame, err := proto.Marshal(dnstap)
+
 		if err == nil {
-			p.output.OutputChannel <- frData
+			p.output.SetMessage(frame)
 		}
 	}
 	return

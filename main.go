@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mimuret/dtap"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/valyala/fasthttp"
@@ -52,6 +54,8 @@ func main() {
 	rootCmd.PersistentFlags().StringP("https-tls-cert", "", "", "tls cert")
 	rootCmd.PersistentFlags().StringP("https-tls-session-ticket-key", "", "", "https session ticket key.")
 	rootCmd.PersistentFlags().BoolP("dnstap", "", false, "enable dnstap")
+	rootCmd.PersistentFlags().BoolP("dnstap-recip", "", false, "enable record remote IP.")
+	rootCmd.PersistentFlags().BoolP("dnstap-usexff", "", false, "record X-Forwarded-For Header.")
 	rootCmd.PersistentFlags().StringP("dnstap-socket", "", "/var/run/dnstap.sock", "dnstap socket path.")
 	rootCmd.PersistentFlags().StringP("dnstap-identity", "", hostname, "dnstap socket path.")
 
@@ -76,7 +80,6 @@ func serv(cb *cobra.Command, args []string) {
 
 	var err error
 	p := Proxy{}
-
 	p.host, _ = cb.PersistentFlags().GetString("proxy-addr")
 	p.timeout, _ = cb.PersistentFlags().GetDuration("timeout")
 	p.addr, err = net.ResolveUDPAddr("udp", p.host)
@@ -88,7 +91,10 @@ func serv(cb *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	if enable, _ := cb.PersistentFlags().GetBool("dnstap"); enable {
 		sockFile, _ := cb.PersistentFlags().GetString("dnstap-socket")
-		p.output = NewFrameStreamSockOutput(sockFile)
+		p.output = dtap.NewDnstapFstrmUnixSockOutput(&dtap.OutputUnixSocketConfig{
+			Path:       sockFile,
+			BufferSize: bufferSize,
+		})
 		if identity, err := cb.PersistentFlags().GetString("dnstap-identity"); err != nil {
 			p.identity = []byte(identity)
 		}
@@ -98,11 +104,13 @@ func serv(cb *cobra.Command, args []string) {
 				"Error": err,
 			}).Fatal("error make dnstap stream")
 		}
+		p.recIP, _ = cb.PersistentFlags().GetBool("dnstap-recip")
+		p.useXFF, _ = cb.PersistentFlags().GetBool("dnstap-usexff")
 		p.dnstap = true
 		log.WithFields(log.Fields{
 			"func": "serv",
 		}).Info("start DNSTAP outputer")
-		go p.output.RunOutputLoop(ctx)
+		go p.output.Run(ctx)
 	}
 	if enable, _ := cb.PersistentFlags().GetBool("http"); enable {
 		listen, _ := cb.PersistentFlags().GetString("http-listen")
