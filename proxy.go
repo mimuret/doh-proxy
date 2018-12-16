@@ -62,7 +62,12 @@ func (p *Proxy) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 		ctx.Error("Unsupported method", fasthttp.StatusBadRequest)
 		return
 	}
-	if dnsMsg == nil {
+	if dnsMsg == nil || len(dnsMsg) == 0 {
+		ctx.Error("bad request", fasthttp.StatusBadRequest)
+		return
+	}
+	msg := dns.Msg{}
+	if err := msg.Unpack(dnsMsg); err != nil {
 		ctx.Error("bad request", fasthttp.StatusBadRequest)
 		return
 	}
@@ -141,7 +146,7 @@ func (p *Proxy) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 	ctx.Response.SetBody(recvBuf)
 
 	// parse ttl
-	msg := dns.Msg{}
+	msg = dns.Msg{}
 	err = msg.Unpack(recvBuf)
 	if err != nil {
 		data := ""
