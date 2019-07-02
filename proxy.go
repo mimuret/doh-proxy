@@ -7,6 +7,11 @@ import (
 	"strconv"
 	"time"
 
+	crand "crypto/rand"
+	"math"
+	"math/big"
+	"math/rand"
+
 	"github.com/mimuret/dtap"
 
 	dnstap "github.com/dnstap/golang-dnstap"
@@ -17,6 +22,11 @@ import (
 )
 
 var dnstapType = dnstap.Dnstap_MESSAGE
+
+func init() {
+	seed, _ := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
+	rand.Seed(seed.Int64())
+}
 
 type Proxy struct {
 	host     string
