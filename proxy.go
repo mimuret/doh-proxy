@@ -48,9 +48,9 @@ func (p *Proxy) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 			ctx.Error("bad request", fasthttp.StatusBadRequest)
 			return
 		}
-		dlen := base64.URLEncoding.DecodedLen(len(dnsMsgBase64))
+		dlen := base64.RawURLEncoding.DecodedLen(len(dnsMsgBase64))
 		dnsMsg = make([]byte, dlen)
-		_, err = base64.URLEncoding.Decode(dnsMsg, dnsMsgBase64)
+		_, err = base64.RawURLEncoding.Decode(dnsMsg, dnsMsgBase64)
 		if err != nil {
 			ctx.Error("failed to decode query.", fasthttp.StatusBadRequest)
 			return
@@ -90,6 +90,10 @@ func (p *Proxy) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 	}).Debug("start proxy query")
 	c := new(dns.Client)
 	c.Net = "udp"
+	c.DialTimeout = 2 * time.Second
+	c.ReadTimeout = 2 * time.Second
+	c.WriteTimeout = 1 * time.Second
+
 	r, _, err := c.Exchange(&msg, p.host)
 
 	if err != nil {

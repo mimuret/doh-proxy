@@ -1,0 +1,40 @@
+module github.com/mimuret/doh-proxy
+
+go 1.12
+
+require (
+	github.com/dnstap/golang-dnstap v0.0.0-20170829151710-2cf77a2b5e11
+	github.com/farsightsec/golang-framestream v0.0.0-20180820161818-d0f7ed81b7af
+	github.com/fluent/fluent-logger-golang v1.4.0
+	github.com/fsnotify/fsnotify v1.4.7
+	github.com/golang/protobuf v1.2.0
+	github.com/hashicorp/hcl v1.0.0
+	github.com/inconshreveable/mousetrap v1.0.0
+	github.com/jehiah/go-strftime v0.0.0-20171201141054-1d33003b3869
+	github.com/klauspost/compress v1.4.0
+	github.com/klauspost/cpuid v0.0.0-20170728055534-ae7887de9fa5
+	github.com/konsorten/go-windows-terminal-sequences v1.0.1
+	github.com/magiconair/properties v1.8.0
+	github.com/miekg/dns v1.0.12
+	github.com/mimuret/dtap v0.1.2
+	github.com/mitchellh/mapstructure v1.1.2
+	github.com/pelletier/go-toml v1.3.0
+	github.com/philhofer/fwd v1.0.0
+	github.com/pkg/errors v0.8.1
+	github.com/sirupsen/logrus v1.1.0
+	github.com/spf13/afero v1.2.2
+	github.com/spf13/cast v1.3.0
+	github.com/spf13/cobra v0.0.3
+	github.com/spf13/jwalterweatherman v1.1.0
+	github.com/spf13/pflag v1.0.3
+	github.com/spf13/viper v1.3.2
+	github.com/tinylib/msgp v1.1.0
+	github.com/ulikunitz/xz v0.5.6
+	github.com/valyala/bytebufferpool v1.0.0
+	github.com/valyala/fasthttp v0.0.0-20171207120941-e5f51c11919d
+	golang.org/x/crypto v0.0.0-20181203042331-505ab145d0a9
+	golang.org/x/net v0.0.0-20181005035420-146acd28ed58
+	golang.org/x/sys v0.0.0-20181205085412-a5c9d58dba9a
+	golang.org/x/text v0.3.0
+	gopkg.in/yaml.v2 v2.2.2
+)
