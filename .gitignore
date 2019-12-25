@@ -1,2 +1,3 @@
 vendor
-doh-proxy
+cmd/doh-proxy/doh-proxy
+.vscode
