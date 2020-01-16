@@ -40,6 +40,7 @@ func main() {
 	rootCmd.PersistentFlags().BoolP("recip", "", false, "enable record remote IP.")
 	rootCmd.PersistentFlags().BoolP("dnstap", "", false, "enable dnstap")
 	rootCmd.PersistentFlags().StringP("dnstap-socket", "", "/var/run/dnstap.sock", "dnstap socket path.")
+	rootCmd.PersistentFlags().StringP("server-name", "", "doh-proxy", "server name.")
 
 	if err := rootCmd.Execute(); err != nil {
 		log.WithFields(log.Fields{
@@ -72,6 +73,7 @@ func serv(cb *cobra.Command, args []string) {
 		loggers = append(loggers, dnstap)
 	}
 
+	serverName, _ := cb.PersistentFlags().GetString("server-name")
 	host, _ := cb.PersistentFlags().GetString("proxy-addr")
 	ri := resolver.NewTraditional(host)
 
@@ -93,6 +95,7 @@ func serv(cb *cobra.Command, args []string) {
 		}
 		srv := &fasthttp.Server{
 			Handler: re.HandleFastHTTP,
+			Name:    serverName,
 		}
 		log.WithFields(log.Fields{
 			"func":   "serv",

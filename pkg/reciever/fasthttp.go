@@ -16,6 +16,7 @@ var (
 	strDns             = []byte("dns")
 	strDnsContentType  = []byte("application/dns-message")
 	strDnsCacheControl = []byte("cache-control")
+	strServer          = []byte("server")
 )
 
 type FastHTTP struct {
@@ -47,6 +48,7 @@ func (p *FastHTTP) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 	// parse ttl
 	ctx.Response.Header.SetBytesK(strDnsCacheControl, strconv.FormatUint(uint64(ttl), 10))
 	ctx.Response.Header.SetContentTypeBytes(strDnsContentType)
+
 	ctx.Response.SetBody(res)
 
 }
