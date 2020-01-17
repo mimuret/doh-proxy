@@ -39,3 +39,7 @@ type ResolvInterface interface {
 type LoggingInterface interface {
 	Logging(LoggerLevel, *dns.Msg, dnstap.Message_Type, net.IP, uint32)
 }
+
+type MetricsInterface interface {
+	IncQueryCount()
+}

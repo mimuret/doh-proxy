@@ -41,6 +41,7 @@ func main() {
 	rootCmd.PersistentFlags().BoolP("dnstap", "", false, "enable dnstap")
 	rootCmd.PersistentFlags().StringP("dnstap-socket", "", "/var/run/dnstap.sock", "dnstap socket path.")
 	rootCmd.PersistentFlags().StringP("server-name", "", "doh-proxy", "server name.")
+	rootCmd.PersistentFlags().StringP("metrics-listen", "", "127.0.0.1:9000", "listen prometies metrics server.")
 
 	if err := rootCmd.Execute(); err != nil {
 		log.WithFields(log.Fields{
@@ -72,6 +73,9 @@ func serv(cb *cobra.Command, args []string) {
 		dnstap := logger.NewDNSTAP(domain.TraceLevel, output, recIP)
 		loggers = append(loggers, dnstap)
 	}
+	metricsServerListen, _ := cb.PersistentFlags().GetString("metrics-listen")
+	metricsLogger := logger.NewPrometheus(metricsServerListen)
+	loggers = append(loggers, metricsLogger)
 
 	serverName, _ := cb.PersistentFlags().GetString("server-name")
 	host, _ := cb.PersistentFlags().GetString("proxy-addr")
