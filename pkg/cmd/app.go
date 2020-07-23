@@ -32,7 +32,7 @@ func newApp() *app {
 func (a *app) Serve(cb *cobra.Command, args []string) {
 	loglevel := a.viper.GetString("log-level")
 	log.WithFields(log.Fields{
-		"func":      "serv",
+		"func":      "Serve",
 		"log-level": loglevel,
 	}).Info("set log-level")
 	SetLogLevel(loglevel)
@@ -51,11 +51,21 @@ func (a *app) Serve(cb *cobra.Command, args []string) {
 		dnstap := logger.NewDNSTAP(domain.TraceLevel, output, recIP)
 		loggers = append(loggers, dnstap)
 	}
+	log.WithFields(log.Fields{
+		"func": "Serve",
+	}).Debug("logger created")
 
 	// metrics
 	metricsServerListen := a.viper.GetString("metrics-listen")
 	metricsLogger := logger.NewPrometheus(metricsServerListen)
+	go func() {
+		metricsLogger.Start()
+	}()
 	loggers = append(loggers, metricsLogger)
+
+	log.WithFields(log.Fields{
+		"func": "Serve",
+	}).Debug("metrics created")
 
 	// resolver(proxy client)
 	host := a.viper.GetString("proxy-addr")
@@ -64,9 +74,17 @@ func (a *app) Serve(cb *cobra.Command, args []string) {
 	tcpOnly := a.viper.GetBool("tcp-only")
 	ri := resolver.NewTraditional(host, retry, timeout, tcpOnly)
 
+	log.WithFields(log.Fields{
+		"func": "Serve",
+	}).Debug("resolver created")
+
 	// controller
 	useXFF := a.viper.GetBool("dnstap-usexff")
 	ctr := domain.NewController(ri, loggers, useXFF)
+
+	log.WithFields(log.Fields{
+		"func": "Serve",
+	}).Debug("controller created")
 
 	// http server
 	rTypeStr := a.viper.GetString("reciever-type")
@@ -78,6 +96,10 @@ func (a *app) Serve(cb *cobra.Command, args []string) {
 	}
 	listen := a.viper.GetString("http-listen")
 	serverName := a.viper.GetString("server-name")
+
+	log.WithFields(log.Fields{
+		"func": "Serve",
+	}).Debug("reciever created")
 
 	// start http server
 	if err := reciever.StartServer(serverName, listen, rec); err != nil {

@@ -1,9 +1,10 @@
 package logger
 
 import (
-	log "github.com/sirupsen/logrus"
 	"net"
 	"net/http"
+
+	log "github.com/sirupsen/logrus"
 
 	dnstap "github.com/dnstap/golang-dnstap"
 	"github.com/miekg/dns"
@@ -29,12 +30,15 @@ type Prometheus struct {
 }
 
 func NewPrometheus(listen string) *Prometheus {
+	return &Prometheus{listen}
+}
+
+func (l *Prometheus) Start() {
 	http.Handle("/metrics", promhttp.Handler())
-	err := http.ListenAndServe(listen, nil)
+	err := http.ListenAndServe(l.listen, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &Prometheus{}
 }
 
 func (l *Prometheus) Logging(level domain.LoggerLevel, msg *dns.Msg, mtype dnstap.Message_Type, ip net.IP, port uint32) {
