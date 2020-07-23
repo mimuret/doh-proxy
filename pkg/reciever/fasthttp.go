@@ -2,55 +2,54 @@ package reciever
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"net"
-	"strconv"
 
 	"github.com/mimuret/doh-proxy/pkg/domain"
-	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 )
 
 var (
-	strDnsPath         = []byte("/dns-query")
-	strDns             = []byte("dns")
-	strDnsContentType  = []byte("application/dns-message")
-	strDnsCacheControl = []byte("cache-control")
-	strServer          = []byte("server")
+	strDnsPath = []byte("/dns-query")
+	strDns     = []byte("dns")
+	strServer  = []byte("server")
 )
 
 type FastHTTP struct {
-	ctr    *domain.Controller
+	ctr    domain.DohController
 	listen string
+	server *fasthttp.Server
 }
 
-func NewFastHTTP(ctr *domain.Controller) *FastHTTP {
+func NewFastHTTP(ctr domain.DohController) *FastHTTP {
 	return &FastHTTP{
 		ctr: ctr,
 	}
 }
+func (p *FastHTTP) StartServer(serverName string, listeners []net.Listener) {
+	p.server = &fasthttp.Server{
+		Handler: p.HandleFastHTTP,
+		Name:    serverName,
+	}
+	for _, ln := range listeners {
+		go func(ln net.Listener) {
+			p.server.Serve(ln)
+		}(ln)
+	}
+}
+
+func (p *FastHTTP) Shutdown(_ context.Context) error {
+	return p.server.Shutdown()
+}
+
 func (p *FastHTTP) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 	if !bytes.Equal(ctx.Path(), strDnsPath) {
 		ctx.Error("Unsupported path", fasthttp.StatusNotFound)
 		return
 	}
 	fctx := NewFastHTTPContext(ctx)
-	res, ttl, err := p.ctr.Resolv(fctx)
-	if err == domain.ErrorBadRequest {
-		ctx.Error("bad request", fasthttp.StatusBadRequest)
-		return
-	}
-	if err != nil {
-		log.Error(err.Error())
-		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
-		return
-	}
-	// parse ttl
-	ctx.Response.Header.SetBytesK(strDnsCacheControl, strconv.FormatUint(uint64(ttl), 10))
-	ctx.Response.Header.SetContentTypeBytes(strDnsContentType)
-
-	ctx.Response.SetBody(res)
-
+	p.ctr.ServeDoH(fctx)
 }
 
 type FastHTTPContext struct {
@@ -89,5 +88,17 @@ func (p *FastHTTPContext) Data() []byte {
 		dnsMsg := p.ctx.PostBody()
 		return dnsMsg
 	}
+	return nil
+}
+
+func (c *FastHTTPContext) SetHeader(key, val string) {
+	c.ctx.Response.Header.Set(key, val)
+}
+
+func (c *FastHTTPContext) SetStatusCode(code int) {
+	c.ctx.Response.SetStatusCode(code)
+}
+func (c *FastHTTPContext) SetBody(body []byte) error {
+	c.ctx.Response.SetBody(body)
 	return nil
 }
