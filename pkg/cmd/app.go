@@ -37,10 +37,14 @@ func (a *app) Serve(cb *cobra.Command, args []string) {
 	}).Info("set log-level")
 	SetLogLevel(loglevel)
 
-	// logger setting
+	// query logger setting
 	recIP := a.viper.GetBool("recip")
 	loggers := []domain.LoggingInterface{}
-	stdlogger := logger.NewStdout(domain.InfoLevel, recIP)
+	queryLogLevel := domain.InfoLevel
+	if a.viper.GetString("querylog-level") == "trace" {
+		queryLogLevel = domain.TraceLevel
+	}
+	stdlogger := logger.NewStdout(queryLogLevel, recIP)
 	loggers = append(loggers, stdlogger)
 	if a.viper.GetBool("dnstap") {
 		sockFile := a.viper.GetString("dnstap-socket")

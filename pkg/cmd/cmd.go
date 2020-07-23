@@ -46,6 +46,9 @@ func NewRootCommand() *cobra.Command {
 	rootCmd.PersistentFlags().UintP("dnstap-buffer", "", 8192, "dnstap buffer sizes.")
 	a.viper.BindPFlag("dnstap-buffer", rootCmd.PersistentFlags().Lookup("dnstap-buffer"))
 
+	rootCmd.PersistentFlags().StringP("querylog-level", "", "error", "(error|trace) querylog output to stdout, error is error only")
+	a.viper.BindPFlag("querylog-level", rootCmd.PersistentFlags().Lookup("querylog-level"))
+
 	rootCmd.PersistentFlags().StringP("metrics-listen", "", "127.0.0.1:9000", "listen prometies metrics server.")
 	a.viper.BindPFlag("metrics-listen", rootCmd.PersistentFlags().Lookup("metrics-listen"))
 
