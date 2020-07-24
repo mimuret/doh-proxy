@@ -9,6 +9,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var mlog = log.WithField("Package", "main")
+
 const bufferSize = 4096
 
 func init() {
@@ -21,9 +23,6 @@ func init() {
 func main() {
 	rootCmd := cmd.NewRootCommand()
 	if err := rootCmd.Execute(); err != nil {
-		log.WithFields(log.Fields{
-			"Func":  "main",
-			"Error": err,
-		}).Fatal("failed to parse flag")
+		mlog.WithError(err).Fatal("failed to parse flags")
 	}
 }

@@ -14,55 +14,87 @@ import (
 )
 
 var (
-	strXFF = "X-Forwarded-For"
-	strXFP = "X-Forwarded-Port"
+	clog = log.WithField("Package", "controller")
 )
 
 type Controller struct {
 	ri      ResolvInterface
 	loggers []LoggingInterface
-	useXFF  bool
+	recIP   *RecIP
 }
 
-func NewController(ri ResolvInterface, loggers []LoggingInterface, useXFF bool) *Controller {
+func NewController(ri ResolvInterface, loggers []LoggingInterface, recIP *RecIP) *Controller {
 	return &Controller{ri: ri,
 		loggers: loggers,
-		useXFF:  useXFF,
+		recIP:   recIP,
 	}
+}
+
+type resolvReq struct {
+	RecieverInterface
+	ip   net.IP
+	port uint32
 }
 
 func (c *Controller) ServeDoH(re RecieverInterface) {
-	res, ttl, derr := c.resolv(re)
+	res, ttl, scode, derr := c.serve(re)
+	slog := clog.WithFields(log.Fields{
+		"RequestID":  re.RequestID,
+		"StatusCode": scode,
+		"RemoteAddr": c.recIP.RemoteIP(re, false),
+		"RemotePort": c.recIP.RemotePort(re),
+	})
 	if derr != nil {
-		switch derr.Code {
-		case ErrCodeBadRequest:
-			re.SetStatusCode(http.StatusBadRequest)
-			return
-		case ErrCodeResolvError:
-			var rerr *ResolvError
-			if errors.As(derr, &rerr) {
-				switch rerr.Code {
-				case ResolvErrCodeTimeout:
-					re.SetStatusCode(http.StatusRequestTimeout)
-				}
-			}
+		re.SetStatusCode(scode)
+		if scode == http.StatusBadRequest {
+			slog.WithError(derr).WithFields(log.Fields{
+				"RemoteAddr": c.recIP.RemoteIP(re, true),
+			}).Warn("Bad request")
+		} else {
+			slog.WithError(derr).WithFields(log.Fields{
+				"RemoteAddr": c.recIP.RemoteIP(re, true),
+			}).Error("resolv runtime error")
 		}
-		log.Error(derr)
-		re.SetStatusCode(http.StatusInternalServerError)
 		return
 	}
-
 	// parse ttl
 	re.SetHeader("content-type", "application/dns-message")
 	re.SetHeader("cache-control", strconv.FormatUint(uint64(ttl), 10))
 	err := re.SetBody(res)
 	if err != nil {
-		log.Error(fmt.Errorf("can't write body: %w", err))
+		slog.WithError(err).WithFields(log.Fields{
+			"StatusCode": http.StatusInternalServerError,
+			"RemoteAddr": c.recIP.RemoteIP(re, true),
+		}).Error("failed to write body")
 		re.SetStatusCode(http.StatusInternalServerError)
+		return
 	}
+	slog.WithFields(log.Fields{
+		"RemoteAddr": c.recIP.RemoteIP(re, false),
+		"RemotePort": c.recIP.RemotePort(re),
+	}).Info("success")
+
+}
+
+func (c *Controller) serve(re RecieverInterface) ([]byte, uint32, int, error) {
+	scode := http.StatusOK
+	res, ttl, derr := c.resolv(re)
+	if derr != nil {
+		var rerr *ResolvError
+		scode = http.StatusInternalServerError
+		if derr.Code == ErrCodeBadRequest {
+			scode = http.StatusBadRequest
+		} else if derr.Code == ErrCodeResolvError && errors.As(derr, &rerr) && rerr.Code == ResolvErrCodeTimeout {
+			scode = http.StatusRequestTimeout
+		}
+	}
+	return res, ttl, scode, derr
 }
 
 func (c *Controller) resolv(re RecieverInterface) ([]byte, uint32, *Error) {
+	remoteIP := c.recIP.RemoteIP(re, false)
+	errRemoteIP := c.recIP.RemoteIP(re, true)
+	remotePort := c.recIP.RemotePort(re)
 	dnsMsg := re.Data()
 	if dnsMsg == nil {
 		return nil, 0, &Error{fmt.Errorf("failed to get request data"), ErrCodeInternalServerError}
@@ -71,28 +103,16 @@ func (c *Controller) resolv(re RecieverInterface) ([]byte, uint32, *Error) {
 	if err := msg.Unpack(dnsMsg); err != nil {
 		return nil, 0, &Error{fmt.Errorf("failed to parse dns message: %w", err), ErrCodeInternalServerError}
 	}
-	remoteIP := re.RemoteIP()
-	remotePort := uint32(re.RemotePort())
-	if c.useXFF {
-		if xff := re.Header(strXFF); xff != nil {
-			remoteIP = net.ParseIP(string(xff))
-			if xfp := re.Header(strXFP); xfp != nil {
-				if port, err := strconv.Atoi(string(xfp)); err == nil {
-					remotePort = uint32(port)
-				}
-			}
-		}
-	}
 	c.logging(TraceLevel, msg, dnstap.Message_CLIENT_QUERY, remoteIP, remotePort)
 	res, rerr := c.ri.Resolv(msg)
 	if rerr != nil {
-		c.logging(ErrorLevel, msg, dnstap.Message_TOOL_QUERY, remoteIP, remotePort)
+		c.logging(ErrorLevel, msg, dnstap.Message_TOOL_QUERY, errRemoteIP, remotePort)
 		return nil, 0, &Error{fmt.Errorf("failed to resolv: %w", rerr), ErrCodeResolvError}
 	}
 	c.logging(TraceLevel, res, dnstap.Message_CLIENT_RESPONSE, remoteIP, remotePort)
 	resbody, err := res.Pack()
 	if err != nil {
-		c.logging(ErrorLevel, res, dnstap.Message_TOOL_RESPONSE, remoteIP, remotePort)
+		c.logging(ErrorLevel, res, dnstap.Message_TOOL_RESPONSE, errRemoteIP, remotePort)
 		return nil, 0, &Error{fmt.Errorf("failed to pack dns message: %w", err), ErrCodeInternalServerError}
 	}
 	var ttl uint32

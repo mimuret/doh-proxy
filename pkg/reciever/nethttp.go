@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
+
 	"github.com/mimuret/doh-proxy/pkg/domain"
 )
 
@@ -41,15 +43,24 @@ func (r *NetHTTP) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 type NetHTTPContext struct {
-	w   http.ResponseWriter
-	req *http.Request
+	w     http.ResponseWriter
+	req   *http.Request
+	reqId string
 }
 
 func NewNetHTTPContext(w http.ResponseWriter, req *http.Request) *NetHTTPContext {
-	return &NetHTTPContext{
-		w:   w,
-		req: req,
+	reqId := req.Header.Get("x-request-id")
+	if reqId == "" {
+		reqId = uuid.New().String()
 	}
+	return &NetHTTPContext{
+		w:     w,
+		req:   req,
+		reqId: reqId,
+	}
+}
+func (c *NetHTTPContext) RequestID() string {
+	return c.reqId
 }
 func (c *NetHTTPContext) RemoteIP() net.IP {
 	addr, _, _ := net.SplitHostPort(c.req.RemoteAddr)

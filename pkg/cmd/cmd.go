@@ -40,6 +40,12 @@ func NewRootCommand() *cobra.Command {
 	rootCmd.PersistentFlags().BoolP("recip", "", false, "enable record remote IP.")
 	a.viper.BindPFlag("recip", rootCmd.PersistentFlags().Lookup("recip"))
 
+	rootCmd.PersistentFlags().BoolP("recip-error", "", false, "enable record remote IP on error.")
+	a.viper.BindPFlag("recip-error", rootCmd.PersistentFlags().Lookup("recip-error"))
+
+	rootCmd.PersistentFlags().StringP("recip-net", "", "", "enable record remote IP include network. comma separated.")
+	a.viper.BindPFlag("recip-net", rootCmd.PersistentFlags().Lookup("recip-net"))
+
 	rootCmd.PersistentFlags().StringP("dnstap-socket", "", "/var/run/dnstap.sock", "dnstap socket path.")
 	a.viper.BindPFlag("dnstap-socket", rootCmd.PersistentFlags().Lookup("dnstap-socket"))
 

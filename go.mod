@@ -11,6 +11,7 @@ require (
 	github.com/farsightsec/golang-framestream v0.0.0-20180820161818-d0f7ed81b7af // indirect
 	github.com/fluent/fluent-logger-golang v1.4.0 // indirect
 	github.com/gogo/protobuf v1.3.1
+	github.com/google/uuid v1.1.1
 	github.com/jehiah/go-strftime v0.0.0-20171201141054-1d33003b3869 // indirect
 	github.com/kr/pretty v0.2.0 // indirect
 	github.com/miekg/dns v1.1.30

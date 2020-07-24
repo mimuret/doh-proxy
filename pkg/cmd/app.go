@@ -11,11 +11,15 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mimuret/doh-proxy/pkg/domain"
-	"github.com/mimuret/doh-proxy/pkg/logger"
+	"github.com/mimuret/doh-proxy/pkg/querylogger"
 	"github.com/mimuret/doh-proxy/pkg/reciever"
 	"github.com/mimuret/doh-proxy/pkg/resolver"
 	"github.com/mimuret/dtap"
 	"github.com/spf13/cobra"
+)
+
+var (
+	alog = log.WithFields(log.Fields{"Package": "cmd"})
 )
 
 type app struct {
@@ -31,20 +35,18 @@ func newApp() *app {
 
 func (a *app) Serve(cb *cobra.Command, args []string) {
 	loglevel := a.viper.GetString("log-level")
-	log.WithFields(log.Fields{
-		"func":      "Serve",
+	alog.WithFields(log.Fields{
 		"log-level": loglevel,
 	}).Info("set log-level")
 	SetLogLevel(loglevel)
 
 	// query logger setting
-	recIP := a.viper.GetBool("recip")
 	loggers := []domain.LoggingInterface{}
 	queryLogLevel := domain.InfoLevel
 	if a.viper.GetString("querylog-level") == "trace" {
 		queryLogLevel = domain.TraceLevel
 	}
-	stdlogger := logger.NewStdout(queryLogLevel, recIP)
+	stdlogger := querylogger.NewStdout(queryLogLevel)
 	loggers = append(loggers, stdlogger)
 	if a.viper.GetBool("dnstap") {
 		sockFile := a.viper.GetString("dnstap-socket")
@@ -52,24 +54,20 @@ func (a *app) Serve(cb *cobra.Command, args []string) {
 			Path:       sockFile,
 			BufferSize: a.viper.GetUint("dnstap-buffer"),
 		})
-		dnstap := logger.NewDNSTAP(domain.TraceLevel, output, recIP)
+		dnstap := querylogger.NewDNSTAP(domain.TraceLevel, output)
 		loggers = append(loggers, dnstap)
 	}
-	log.WithFields(log.Fields{
-		"func": "Serve",
-	}).Debug("logger created")
+	alog.Debug("logger created")
 
 	// metrics
 	metricsServerListen := a.viper.GetString("metrics-listen")
-	metricsLogger := logger.NewPrometheus(metricsServerListen)
+	metricsLogger := querylogger.NewPrometheus(metricsServerListen)
 	go func() {
 		metricsLogger.Start()
 	}()
 	loggers = append(loggers, metricsLogger)
 
-	log.WithFields(log.Fields{
-		"func": "Serve",
-	}).Debug("metrics created")
+	alog.Debug("metrics created")
 
 	// resolver(proxy client)
 	host := a.viper.GetString("proxy-addr")
@@ -78,48 +76,42 @@ func (a *app) Serve(cb *cobra.Command, args []string) {
 	tcpOnly := a.viper.GetBool("tcp-only")
 	ri := resolver.NewTraditional(host, retry, timeout, tcpOnly)
 
-	log.WithFields(log.Fields{
-		"func": "Serve",
-	}).Debug("resolver created")
+	alog.Debug("resolver created")
 
 	// controller
 	useXFF := a.viper.GetBool("dnstap-usexff")
-	ctr := domain.NewController(ri, loggers, useXFF)
+	recAll := a.viper.GetBool("recip")
+	recOnError := a.viper.GetBool("recip-error")
+	recNetworks := a.viper.GetString("recip-net")
+	recip, err := domain.NewRecIP(useXFF, recAll, recOnError, recNetworks)
+	if err != nil {
+		alog.WithError(err).Fatal("can't create recip")
+	}
+	ctr := domain.NewController(ri, loggers, recip)
 
-	log.WithFields(log.Fields{
-		"func": "Serve",
-	}).Debug("controller created")
+	alog.Debug("controller created")
 
 	// http server
 	rTypeStr := a.viper.GetString("reciever-type")
 	rec := reciever.GetReciever(rTypeStr, ctr)
 	if rec == nil {
-		log.WithFields(log.Fields{
-			"func": "serv",
-		}).Fatal("can't create reciever")
+		alog.Fatal("can't create reciever")
 	}
 	listen := a.viper.GetString("http-listen")
 	serverName := a.viper.GetString("server-name")
 
-	log.WithFields(log.Fields{
-		"func": "Serve",
-	}).Debug("reciever created")
+	alog.Debug("reciever created")
 
 	// start http server
 	if err := reciever.StartServer(serverName, listen, rec); err != nil {
-		log.WithFields(log.Fields{
-			"func": "serv",
-			"err":  err,
-		}).Fatal("can't create reciever")
+		alog.WithError(err).Fatal("can't create reciever")
 	}
 
 	sigTermCh := make(chan os.Signal, 1)
 	sigQuitCh := make(chan os.Signal, 1)
 	signal.Notify(sigTermCh, syscall.SIGTERM)
 	signal.Notify(sigQuitCh, syscall.SIGQUIT)
-	log.WithFields(log.Fields{
-		"func": "serv",
-	}).Info("start server")
+	alog.Info("start server")
 	select {
 	case <-sigQuitCh:
 		rec.Shutdown(context.Background())

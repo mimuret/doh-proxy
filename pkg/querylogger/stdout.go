@@ -1,9 +1,9 @@
-package logger
+package querylogger
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 
@@ -13,14 +13,12 @@ import (
 )
 
 type Stdout struct {
-	recIP bool
 	level domain.LoggerLevel
 }
 
-func NewStdout(level domain.LoggerLevel, recIP bool) *Stdout {
+func NewStdout(level domain.LoggerLevel) *Stdout {
 	return &Stdout{
 		level: level,
-		recIP: recIP,
 	}
 }
 func (l *Stdout) Logging(level domain.LoggerLevel, msg *dns.Msg, mtype dnstap.Message_Type, ip net.IP, port uint32) {
@@ -31,23 +29,16 @@ func (l *Stdout) Logging(level domain.LoggerLevel, msg *dns.Msg, mtype dnstap.Me
 	if err != nil {
 		return
 	}
-	var family dnstap.SocketFamily
-	if strings.Contains(ip.String(), ":") {
-		family = dnstap.SocketFamily_INET6
-	} else {
-		family = dnstap.SocketFamily_INET
+	jsonMsg, err := json.Marshal(msg)
+	if err != nil {
+		return
 	}
-	if !l.recIP {
-		if family == dnstap.SocketFamily_INET {
-			ip = net32
-		} else {
-			ip = net128
-		}
-	}
-	log.WithFields(log.Fields{
+
+	qlog.WithFields(log.Fields{
+		"Type":         "querylog",
 		"QueryAddress": ip,
 		"QueryPort":    port,
-		"QueryMessage": msg.String(),
+		"QueryMessage": string(jsonMsg),
 		"QueryBase64":  base64.RawURLEncoding.EncodeToString(bs),
 	}).Info()
 }

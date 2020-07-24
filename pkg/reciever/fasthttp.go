@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"net"
 
+	"github.com/google/uuid"
+
 	"github.com/mimuret/doh-proxy/pkg/domain"
 	"github.com/valyala/fasthttp"
 )
@@ -53,13 +55,27 @@ func (p *FastHTTP) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 }
 
 type FastHTTPContext struct {
-	ctx *fasthttp.RequestCtx
+	ctx        *fasthttp.RequestCtx
+	reqId      string
+	remoteIP   net.IP
+	remotePort uint16
 }
 
 func NewFastHTTPContext(ctx *fasthttp.RequestCtx) *FastHTTPContext {
-	return &FastHTTPContext{
-		ctx: ctx,
+	var reqId string
+	reqIdBytes := ctx.Request.Header.Peek("x-request-id")
+	if reqIdBytes == nil {
+		reqId = uuid.New().String()
+	} else {
+		reqId = string(reqIdBytes)
 	}
+	return &FastHTTPContext{
+		ctx:   ctx,
+		reqId: reqId,
+	}
+}
+func (p *FastHTTPContext) RequestID() string {
+	return p.reqId
 }
 func (p *FastHTTPContext) RemoteIP() net.IP {
 	remote_addr, _ := p.ctx.RemoteAddr().(*net.TCPAddr)

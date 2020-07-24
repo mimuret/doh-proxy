@@ -20,6 +20,7 @@ const (
 )
 
 type RecieverInterface interface {
+	RequestID() string
 	RemoteIP() net.IP
 	RemotePort() uint16
 	Data() []byte
