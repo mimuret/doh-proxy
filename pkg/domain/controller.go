@@ -39,7 +39,7 @@ type resolvReq struct {
 func (c *Controller) ServeDoH(re RecieverInterface) {
 	res, ttl, scode, derr := c.serve(re)
 	slog := clog.WithFields(log.Fields{
-		"RequestID":  re.RequestID,
+		"RequestID":  re.RequestID(),
 		"StatusCode": scode,
 		"RemoteAddr": c.recIP.RemoteIP(re, false),
 		"RemotePort": c.recIP.RemotePort(re),
@@ -76,7 +76,7 @@ func (c *Controller) ServeDoH(re RecieverInterface) {
 
 }
 
-func (c *Controller) serve(re RecieverInterface) ([]byte, uint32, int, error) {
+func (c *Controller) serve(re RecieverInterface) ([]byte, uint32, int, *Error) {
 	scode := http.StatusOK
 	res, ttl, derr := c.resolv(re)
 	if derr != nil {
