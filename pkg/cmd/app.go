@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,14 +24,22 @@ var (
 )
 
 type app struct {
-	viper *viper.Viper
+	version string
+	commit  string
+	date    string
+	buildBy string
+	viper   *viper.Viper
 }
 
-func newApp() *app {
+func newApp(version, commit, date, buildBy string) *app {
 	v := viper.New()
 	v.SetEnvPrefix("DOH_PROXY")
 	v.AutomaticEnv()
-	return &app{v}
+	return &app{version, commit, date, buildBy, v}
+}
+
+func (a *app) Version(b *cobra.Command, args []string) {
+	fmt.Printf("doh-proxy version v%s (commitid: %s), build by %s on %s\n", a.version, a.commit, a.buildBy, a.date)
 }
 
 func (a *app) Serve(cb *cobra.Command, args []string) {

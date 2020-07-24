@@ -9,6 +9,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "unknown"
+)
+
 var mlog = log.WithField("Package", "main")
 
 const bufferSize = 4096
@@ -21,7 +28,7 @@ func init() {
 }
 
 func main() {
-	rootCmd := cmd.NewRootCommand()
+	rootCmd := cmd.NewRootCommand(version, commit, date, buildBy)
 	if err := rootCmd.Execute(); err != nil {
 		mlog.WithError(err).Fatal("failed to parse flags")
 	}

@@ -4,8 +4,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewRootCommand() *cobra.Command {
-	a := newApp()
+func NewRootCommand(version, commit, date, buildBy string) *cobra.Command {
+	a := newApp(version, commit, date, buildBy)
 	rootCmd := &cobra.Command{
 		Use: "doh-proxy",
 		Run: a.Serve,
