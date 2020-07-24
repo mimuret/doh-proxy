@@ -27,19 +27,19 @@ type app struct {
 	version string
 	commit  string
 	date    string
-	buildBy string
+	builtBy string
 	viper   *viper.Viper
 }
 
-func newApp(version, commit, date, buildBy string) *app {
+func newApp(version, commit, date, builtBy string) *app {
 	v := viper.New()
 	v.SetEnvPrefix("DOH_PROXY")
 	v.AutomaticEnv()
-	return &app{version, commit, date, buildBy, v}
+	return &app{version, commit, date, builtBy, v}
 }
 
 func (a *app) Version(b *cobra.Command, args []string) {
-	fmt.Printf("doh-proxy version v%s (commitid: %s), build by %s on %s\n", a.version, a.commit, a.buildBy, a.date)
+	fmt.Printf("doh-proxy version v%s (commitid: %s), build by %s on %s\n", a.version, a.commit, a.builtBy, a.date)
 }
 
 func (a *app) Serve(cb *cobra.Command, args []string) {

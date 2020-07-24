@@ -28,7 +28,7 @@ func init() {
 }
 
 func main() {
-	rootCmd := cmd.NewRootCommand(version, commit, date, buildBy)
+	rootCmd := cmd.NewRootCommand(version, commit, date, builtBy)
 	if err := rootCmd.Execute(); err != nil {
 		mlog.WithError(err).Fatal("failed to parse flags")
 	}
