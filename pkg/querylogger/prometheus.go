@@ -1,7 +1,6 @@
-package logger
+package querylogger
 
 import (
-	log "github.com/sirupsen/logrus"
 	"net"
 	"net/http"
 
@@ -22,6 +21,10 @@ var (
 		Name: "doh_query_types_total",
 		Help: "The total number of queries by qtype",
 	}, []string{"type"})
+	TotalResponseByRcode = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "doh_response_rcode_total",
+		Help: "The total number of response by rcode",
+	}, []string{"rcode"})
 )
 
 type Prometheus struct {
@@ -29,12 +32,15 @@ type Prometheus struct {
 }
 
 func NewPrometheus(listen string) *Prometheus {
+	return &Prometheus{listen}
+}
+
+func (l *Prometheus) Start() {
 	http.Handle("/metrics", promhttp.Handler())
-	err := http.ListenAndServe(listen, nil)
+	err := http.ListenAndServe(l.listen, nil)
 	if err != nil {
-		log.Fatal(err)
+		qlog.WithError(err).Error("failed to start metrics server")
 	}
-	return &Prometheus{}
 }
 
 func (l *Prometheus) Logging(level domain.LoggerLevel, msg *dns.Msg, mtype dnstap.Message_Type, ip net.IP, port uint32) {
@@ -42,5 +48,9 @@ func (l *Prometheus) Logging(level domain.LoggerLevel, msg *dns.Msg, mtype dnsta
 		TotalQueries.Inc()
 		qtype := dns.TypeToString[msg.Question[0].Qtype]
 		TotalQueriesByTypes.With(prometheus.Labels{"type": qtype}).Inc()
+	}
+	if mtype == dnstap.Message_CLIENT_RESPONSE {
+		rcode := dns.RcodeToString[msg.Rcode]
+		TotalResponseByRcode.With(prometheus.Labels{"rcode": rcode}).Inc()
 	}
 }

@@ -1,4 +1,4 @@
-package logger
+package querylogger
 
 import (
 	"net"
@@ -20,11 +20,7 @@ const protobufSize = 1024 * 1024
 
 var (
 	strVersion   = []byte("0.1.0")
-	strXFF       = []byte("X-Forwarded-For")
-	strXFP       = []byte("X-Forwarded-Port")
 	flushTimeout = 1 * time.Second
-	net128       = net.ParseIP("FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF")
-	net32        = net.ParseIP("255.255.255.255")
 )
 
 var (
@@ -34,15 +30,13 @@ var (
 )
 
 type DNSTAP struct {
-	recIP  bool
 	output *dtap.DnstapOutput
 	level  domain.LoggerLevel
 }
 
-func NewDNSTAP(level domain.LoggerLevel, output *dtap.DnstapOutput, recIP bool) *DNSTAP {
+func NewDNSTAP(level domain.LoggerLevel, output *dtap.DnstapOutput) *DNSTAP {
 	return &DNSTAP{
 		output: output,
-		recIP:  recIP,
 		level:  level,
 	}
 }
@@ -60,13 +54,6 @@ func (l *DNSTAP) Logging(level domain.LoggerLevel, msg *dns.Msg, mtype dnstap.Me
 		family = dnstap.SocketFamily_INET6
 	} else {
 		family = dnstap.SocketFamily_INET
-	}
-	if !l.recIP {
-		if family == dnstap.SocketFamily_INET {
-			ip = net32
-		} else {
-			ip = net128
-		}
 	}
 	now := time.Now()
 	timeSec := uint64(now.Unix())
