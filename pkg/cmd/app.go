@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
+	"strings"
 	"github.com/spf13/viper"
 
 	log "github.com/sirupsen/logrus"
@@ -34,7 +34,7 @@ type app struct {
 func newApp(version, commit, date, builtBy string) *app {
 	v := viper.New()
 	v.SetEnvPrefix("DOH_PROXY")
-	v.SetEnvKeyReplacer("-","_")
+	v.SetEnvKeyReplacer(strings.NewReplacer("-","_"))
 	v.AutomaticEnv()
 	return &app{version, commit, date, builtBy, v}
 }
