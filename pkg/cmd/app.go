@@ -34,6 +34,7 @@ type app struct {
 func newApp(version, commit, date, builtBy string) *app {
 	v := viper.New()
 	v.SetEnvPrefix("DOH_PROXY")
+	v.SetEnvKeyReplacer("-","_")
 	v.AutomaticEnv()
 	return &app{version, commit, date, builtBy, v}
 }
