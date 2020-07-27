@@ -97,11 +97,11 @@ func (c *Controller) resolv(re RecieverInterface) ([]byte, uint32, *Error) {
 	remotePort := c.recIP.RemotePort(re)
 	dnsMsg := re.Data()
 	if dnsMsg == nil {
-		return nil, 0, &Error{fmt.Errorf("failed to get request data"), ErrCodeInternalServerError}
+		return nil, 0, &Error{fmt.Errorf("failed to get request data"), ErrCodeBadRequest}
 	}
 	msg := &dns.Msg{}
 	if err := msg.Unpack(dnsMsg); err != nil {
-		return nil, 0, &Error{fmt.Errorf("failed to parse dns message: %w", err), ErrCodeInternalServerError}
+		return nil, 0, &Error{fmt.Errorf("failed to parse dns message: %w", err), ErrCodeBadRequest}
 	}
 	c.logging(TraceLevel, msg, dnstap.Message_CLIENT_QUERY, remoteIP, remotePort)
 	res, rerr := c.ri.Resolv(msg)
