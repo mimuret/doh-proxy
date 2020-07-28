@@ -85,7 +85,7 @@ func (c *Controller) serve(re RecieverInterface) ([]byte, uint32, int, *Error) {
 		if derr.Code == ErrCodeBadRequest {
 			scode = http.StatusBadRequest
 		} else if derr.Code == ErrCodeResolvError && errors.As(derr, &rerr) && rerr.Code == ResolvErrCodeTimeout {
-			scode = http.StatusRequestTimeout
+			scode = http.StatusServiceUnavailable
 		}
 	}
 	return res, ttl, scode, derr
