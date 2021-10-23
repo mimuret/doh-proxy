@@ -46,8 +46,16 @@ func (l *Prometheus) Start() {
 func (l *Prometheus) Logging(level domain.LoggerLevel, msg *dns.Msg, mtype dnstap.Message_Type, ip net.IP, port uint32) {
 	if mtype == dnstap.Message_CLIENT_QUERY {
 		TotalQueries.Inc()
-		qtype := dns.TypeToString[msg.Question[0].Qtype]
+		qtype := "NOTHING"
+		if len(msg.Question) > 0 {
+			qtype = dns.TypeToString[msg.Question[0].Qtype]
+		}
 		TotalQueriesByTypes.With(prometheus.Labels{"type": qtype}).Inc()
+
+	}
+	if mtype == dnstap.Message_CLIENT_RESPONSE {
+		rcode := dns.RcodeToString[msg.Rcode]
+		TotalResponseByRcode.With(prometheus.Labels{"rcode": rcode}).Inc()
 	}
 	if mtype == dnstap.Message_CLIENT_RESPONSE {
 		rcode := dns.RcodeToString[msg.Rcode]

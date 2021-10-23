@@ -85,7 +85,7 @@ func (c *Controller) serve(re RecieverInterface) ([]byte, uint32, int, *Error) {
 		if derr.Code == ErrCodeBadRequest {
 			scode = http.StatusBadRequest
 		} else if derr.Code == ErrCodeResolvError && errors.As(derr, &rerr) && rerr.Code == ResolvErrCodeTimeout {
-			scode = http.StatusServiceUnavailable
+			scode = http.StatusRequestTimeout
 		}
 	}
 	return res, ttl, scode, derr
@@ -97,11 +97,11 @@ func (c *Controller) resolv(re RecieverInterface) ([]byte, uint32, *Error) {
 	remotePort := c.recIP.RemotePort(re)
 	dnsMsg := re.Data()
 	if dnsMsg == nil {
-		return nil, 0, &Error{fmt.Errorf("failed to get request data"), ErrCodeBadRequest}
+		return nil, 0, &Error{fmt.Errorf("failed to get request data"), ErrCodeInternalServerError}
 	}
 	msg := &dns.Msg{}
 	if err := msg.Unpack(dnsMsg); err != nil {
-		return nil, 0, &Error{fmt.Errorf("failed to parse dns message: %w", err), ErrCodeBadRequest}
+		return nil, 0, &Error{fmt.Errorf("failed to parse dns message: %w", err), ErrCodeInternalServerError}
 	}
 	c.logging(TraceLevel, msg, dnstap.Message_CLIENT_QUERY, remoteIP, remotePort)
 	res, rerr := c.ri.Resolv(msg)
